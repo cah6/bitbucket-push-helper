@@ -1,0 +1,62 @@
+name:                bitbucket-push-helper
+version:             0.1.0.0
+github:              "githubuser/bitbucket-push-helper"
+license:             BSD3
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2018 Author name here"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/githubuser/bitbucket-push-helper#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- turtle
+- text
+- servant
+- servant-client
+- aeson
+- http-client
+- http-client-tls
+- bytestring
+- foldl
+
+library:
+  source-dirs: src
+
+executables:
+  bitbucket-push-helper-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -Wall
+    - -Wcompat
+    - -Wincomplete-record-updates
+    - -Wincomplete-uni-patterns
+    - -Wredundant-constraints
+    dependencies:
+    - bitbucket-push-helper
+
+tests:
+  bitbucket-push-helper-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - bitbucket-push-helper
