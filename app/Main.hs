@@ -1,47 +1,57 @@
 #!/usr/bin/env stack
 -- stack --install-ghc runghc --package turtle
-{-# LANGUAGE LambdaCase, DeriveGeneric, OverloadedStrings,
-  DataKinds, TypeOperators #-}
+{-# LANGUAGE LambdaCase, DeriveGeneric, OverloadedStrings, DataKinds, TypeOperators, RecordWildCards #-}
 
 import Control.Applicative (empty)
 import Control.Foldl (head)
+import Control.Lens ((.~))
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (ToJSON)
+import Data.Aeson (FromJSON, eitherDecode)
+import Data.ByteString.Lazy (readFile)
+import Data.Function ((&))
 import Data.Monoid ((<>))
-import Data.Proxy (Proxy(..))
+import Data.String (fromString)
 import Data.Text
-       (Text(), isPrefixOf, replace, stripPrefix, unpack, unwords)
+       (Text(), drop, isPrefixOf, replace, stripPrefix, unpack, unwords)
 import Data.Text.Encoding (encodeUtf8)
+import Filesystem.Path (FilePath)
+import Filesystem.Path.CurrentOS (encodeString)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
-import Servant.API
-       ((:<|>), (:>), BasicAuth, Capture, JSON, Post, ReqBody)
+import Servant.API ((:<|>), (:>), BasicAuth, Capture, JSON, Post, ReqBody)
 import Servant.API.BasicAuth (BasicAuthData(..))
-import Servant.Client
-       (BaseUrl(..), ClientM, Scheme(Https), client, mkClientEnv,
-        runClientM)
+import Servant.Client (BaseUrl(..), ClientM, Scheme(Https), client, mkClientEnv, runClientM)
 import Turtle.Line (Line, lineToText)
 import Turtle.Prelude (die, inshell, need, shell, shells)
 import Turtle.Shell (Shell, fold, sh)
 
-import Prelude hiding (head)
+import Prelude hiding (head, drop, readFile, FilePath)
 import GHC.Generics
+
+import Bitbucket as BB
 
 main :: IO ()
 main = do
   manager <- newManager tlsManagerSettings
+  config <- readConfig ""
   userName <- getPropOrDie "OKTA_USERNAME" "Set it to be something like firstname.lastname@appdynamics.com"
   password <- getPropOrDie "OKTA_PASSWORD" "Set it to be whatever your password is!"
   branchName <- getCurrentBranchName
   shells (mkPushCommand branchName) empty
   let authData = BasicAuthData (encodeUtf8 userName) (encodeUtf8 password)
   res <- runClientM
-      (createPr authData "Analytics" "analytics" mkPullRequest)
+      (BB.createPr authData (Main.project config) (Main.repository config) (mkRequestData config))
       (mkClientEnv manager
          (BaseUrl Https "bitbucket.corp.appdynamics.com" 443 ""))
   case res of
     Left err -> putStrLn $ "Error while creating PR: " ++ show err
     Right () -> putStrLn "Success!"
+
+createPrFromConfig :: Config -> BasicAuthData -> ClientM ()
+createPrFromConfig conf authData = BB.createPr authData (Main.project conf) (Main.repository conf) (mkRequestData conf)
+
+params :: Config -> (Text -> Text -> BB.CreatePullRequest)
+params conf = M
 
 getPropOrDie :: Text -> Text -> IO Text
 getPropOrDie prop message = need prop >>= \case
@@ -51,103 +61,39 @@ getPropOrDie prop message = need prop >>= \case
 getCurrentBranchName :: IO Text
 getCurrentBranchName = fold (inshell "git branch | grep '*'" empty) head >>= \case
   Nothing -> die "No current branch. Are you in the right directory?"
-  Just a  -> return $ lineToText a
+  Just a  -> return $ drop 2 $ lineToText a -- drop 2 to trim off "* "
 
 mkPushCommand :: Text -> Text
 mkPushCommand = (<>) "git push -u origin"
 
---------------------------------------
-createPr :: BasicAuthData -> Text -> Text -> CreatePullRequest -> ClientM ()
-createPr = client api
+readConfig :: FilePath -> IO Config
+readConfig fp = do
+  configInBytes <- readFile (encodeString fp)
+  case eitherDecode configInBytes of
+    Left _    -> die $ fromString "Could not read config file. Is your config file formatted as correct JSON?"
+    Right val -> return val
 
-api :: Proxy BitbucketAPI
-api = Proxy
+mkRequestData :: Config -> BB.CreatePullRequest
+mkRequestData Config{..} = BB.defaultCreatePr
+  & BB.fromRef . BB.repository . BB.project . BB.key  .~ project
+  & BB.fromRef . BB.repository . BB.slug .~ repository
+  & BB.toRef . BB.repository . BB.project . BB.key  .~ project
+  & BB.toRef . BB.repository . BB.slug .~ repository
+  & BB.reviewers .~ makeReviewers reviewers
 
-type BitbucketAPI
-   = BasicAuth "foo-realm" () :> "rest" :> "api" :> "1.0" :> "projects" :> Capture "project" Text :> "repos" :> Capture "repo" Text :> ReqBody '[ JSON] CreatePullRequest :> Post '[ JSON] ()
-
---------------------------------------
-data CreatePullRequest = CreatePullRequest
-  { title :: Text
-  , description :: Text
-  , state :: Text
-  , open :: Bool
-  , closed :: Bool
-  , fromRef :: BranchReference
-  , toRef :: BranchReference
-  , locked :: Bool
-  , reviewers :: [Reviewer]
-  } deriving (Generic)
-
-instance ToJSON CreatePullRequest
-
-mkPullRequest :: CreatePullRequest
-mkPullRequest = CreatePullRequest
-  { title = "test1"
-  , description = "test desc"
-  , state = "OPEN"
-  , open = True
-  , closed = False
-  , fromRef = mkBranchReference "feature/christian-test-3"
-  , toRef = mkBranchReference "master"
-  , locked = False
-  , reviewers = [mkReviewer "david.chu@appdynamics.com"]
-  }
+makeReviewers :: [Text] -> [Reviewer]
+makeReviewers = map (\text -> BB.defaultReviewer & BB.user . BB.name .~ text)
 
 --------------------------------------
-data BranchReference = BranchReference
-  { id :: Text
-  , repository :: Repository
-  } deriving (Generic)
 
-instance ToJSON BranchReference
+data Config = Config
+  { project :: Text
+  , repository :: Text
+  , reviewers :: [Text]
+  } deriving (Generic, Show)
 
-mkBranchReference :: Text -> BranchReference
-mkBranchReference id =
-  BranchReference
-  {Main.id = id, repository = mkRepository "analytics" "Analytics"}
+instance FromJSON Config
 
---------------------------------------
-data Repository = Repository
-  { slug :: Text
-  , project :: Project
-  } deriving (Generic)
-
-instance ToJSON Repository
-
-mkRepository :: Text -> Text -> Repository
-mkRepository repoName projectName =
-  Repository {slug = repoName, project = mkProject projectName}
-
---------------------------------------
-newtype Project = Project
-  { key :: Text
-  } deriving (Generic)
-
-instance ToJSON Project
-
-mkProject :: Text -> Project
-mkProject projectName = Project {key = projectName}
-
---------------------------------------
-newtype Reviewer = Reviewer
-  { user :: User
-  } deriving (Generic)
-
-instance ToJSON Reviewer
-
-mkReviewer :: Text -> Reviewer
-mkReviewer name = Reviewer {user = mkUser name}
-
---------------------------------------
-newtype User = User
-  { name :: Text
-  } deriving (Generic)
-
-instance ToJSON User
-
-mkUser :: Text -> User
-mkUser name = User {name = name}
 --{
 --    "title": "test pull request",
 --    "description": "testing bitbucket api",

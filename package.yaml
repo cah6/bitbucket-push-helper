@@ -30,6 +30,8 @@ dependencies:
 - http-client-tls
 - bytestring
 - foldl
+- lens
+- system-filepath
 
 library:
   source-dirs: src

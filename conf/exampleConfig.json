@@ -1,0 +1,8 @@
+{
+  "project": "Project-name",
+  "repository": "repository-name",
+  "reviewers": [
+    "user1@company.com",
+    "user2@company.com"
+  ]
+}
