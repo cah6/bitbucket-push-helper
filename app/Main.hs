@@ -22,6 +22,7 @@ import Servant.API ((:<|>), (:>), BasicAuth, Capture, JSON, Post, ReqBody)
 import Servant.API.BasicAuth (BasicAuthData(..))
 import Servant.Client (BaseUrl(..), ClientM, Scheme(Https), client, mkClientEnv, runClientM)
 import Turtle.Line (Line, lineToText)
+import Turtle.Options (Parser, optPath, options)
 import Turtle.Prelude (die, inshell, need, shell, shells)
 import Turtle.Shell (Shell, fold, sh)
 
@@ -32,12 +33,15 @@ import Bitbucket as BB
 
 main :: IO ()
 main = do
-  manager <- newManager tlsManagerSettings
-  config <- readConfig ""
+  args <- options "Script to start up SaaS-like analytics cluster." optionsParser
+  config <- readConfig (configPath args)
   userName <- getPropOrDie "OKTA_USERNAME" "Set it to be something like firstname.lastname@appdynamics.com"
   password <- getPropOrDie "OKTA_PASSWORD" "Set it to be whatever your password is!"
   branchName <- getCurrentBranchName
+
+  -- now all config related dependencies are satisfied
   shells (mkPushCommand branchName) empty
+  manager <- newManager tlsManagerSettings
   let authData = BasicAuthData (encodeUtf8 userName) (encodeUtf8 password)
   res <- runClientM
       (BB.createPr authData (Main.project config) (Main.repository config) (mkRequestData config))
@@ -47,11 +51,16 @@ main = do
     Left err -> putStrLn $ "Error while creating PR: " ++ show err
     Right () -> putStrLn "Success!"
 
+optionsParser :: Parser ProgramArgs
+optionsParser = ProgramArgs
+  <$> optPath "config" 'c' "Location of config file that defines defaults for your team."
+
+data ProgramArgs = ProgramArgs {
+    configPath :: FilePath
+  }
+
 createPrFromConfig :: Config -> BasicAuthData -> ClientM ()
 createPrFromConfig conf authData = BB.createPr authData (Main.project conf) (Main.repository conf) (mkRequestData conf)
-
-params :: Config -> (Text -> Text -> BB.CreatePullRequest)
-params conf = M
 
 getPropOrDie :: Text -> Text -> IO Text
 getPropOrDie prop message = need prop >>= \case
@@ -93,44 +102,3 @@ data Config = Config
   } deriving (Generic, Show)
 
 instance FromJSON Config
-
---{
---    "title": "test pull request",
---    "description": "testing bitbucket api",
---    "state": "OPEN",
---    "open": true,
---    "closed": false,
---    "fromRef": {
---        "id": "feature/christian-test-3",
---        "repository": {
---            "slug": "analytics",
---            "name": null,
---            "project": {
---                "key": "Analytics"
---            }
---        }
---    },
---    "toRef": {
---        "id": "master",
---        "repository": {
---            "slug": "analytics",
---            "name": null,
---            "project": {
---                "key": "Analytics"
---            }
---        }
---    },
---    "locked": false,
---    "reviewers": [
---        {
---            "user": {
---                "name": "david.chu@appdynamics.com"
---            }
---        }
---    ],
---    "links": {
---        "self": [
---            null
---        ]
---    }
---}
