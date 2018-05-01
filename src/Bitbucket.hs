@@ -17,7 +17,9 @@ createPr = client api
 api :: Proxy BitbucketAPI
 api = Proxy
 
-type BitbucketAPI = BasicAuth "foo-realm" () :> "rest" :> "api" :> "1.0" :> "projects" :> Capture "project" Text :> "repos" :> Capture "repo" Text :> ReqBody '[ JSON] CreatePullRequest :> Post '[ JSON] ()
+type BitbucketAPI = BasicAuth "foo-realm" ()
+  :> "rest" :> "api" :> "1.0" :> "projects" :> Capture "project" Text :> "repos" :> Capture "repo" Text :> "pull-requests"
+  :> ReqBody '[JSON] CreatePullRequest :> Post '[JSON] ()
 
 --------------------------------------
 
@@ -36,7 +38,7 @@ data CreatePullRequest = CreatePullRequest
 defaultCreatePr :: CreatePullRequest
 defaultCreatePr = CreatePullRequest
   { _title = ""
-  , _description = ""
+  , _description = " "
   , _state = "OPEN"
   , _open = True
   , _closed = False

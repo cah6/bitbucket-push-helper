@@ -45,7 +45,6 @@ main = do
   manager <- newManager tlsManagerSettings
   let authData = BasicAuthData (encodeUtf8 userName) (encodeUtf8 password)
   let requestData = mkRequestData config lastTitle localBranchName
-  print $ encode requestData
   res <- runClientM
       (BB.createPr authData (Main.project config) (Main.repository config) requestData)
       (mkClientEnv manager
@@ -61,9 +60,6 @@ optionsParser = ProgramArgs
 data ProgramArgs = ProgramArgs {
     configPath :: FilePath
   }
-
-createPrFromConfig :: Config -> BasicAuthData -> Text -> Text -> ClientM ()
-createPrFromConfig conf authData title localBranchName = BB.createPr authData (Main.project conf) (Main.repository conf) (mkRequestData conf title localBranchName)
 
 getPropOrDie :: Text -> Text -> IO Text
 getPropOrDie prop message = need prop >>= \case
