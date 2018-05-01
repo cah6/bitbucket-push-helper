@@ -6,7 +6,7 @@ import Control.Applicative (empty)
 import Control.Foldl (head)
 import Control.Lens ((.~))
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (FromJSON, eitherDecode)
+import Data.Aeson (FromJSON, eitherDecode, toJSON,encode)
 import Data.ByteString.Lazy (readFile)
 import Data.Function ((&))
 import Data.Monoid ((<>))
@@ -33,18 +33,21 @@ import Bitbucket as BB
 
 main :: IO ()
 main = do
-  args <- options "Script to start up SaaS-like analytics cluster." optionsParser
+  args <- options "Script to create Bitbucket pull request with team specific defaults." optionsParser
   config <- readConfig (configPath args)
   userName <- getPropOrDie "OKTA_USERNAME" "Set it to be something like firstname.lastname@appdynamics.com"
-  password <- getPropOrDie "OKTA_PASSWORD" "Set it to be whatever your password is!"
-  branchName <- getCurrentBranchName
+  password <- getPropOrDie "OKTA_PASSWORD" "Set it to be whatever your okta password is!"
+  localBranchName <- getLocalBranchName
+  lastTitle <- getLastCommitTitle
 
   -- now all config related dependencies are satisfied
-  shells (mkPushCommand branchName) empty
+  shells (mkPushCommand localBranchName) empty
   manager <- newManager tlsManagerSettings
   let authData = BasicAuthData (encodeUtf8 userName) (encodeUtf8 password)
+  let requestData = mkRequestData config lastTitle localBranchName
+  print $ encode requestData
   res <- runClientM
-      (BB.createPr authData (Main.project config) (Main.repository config) (mkRequestData config))
+      (BB.createPr authData (Main.project config) (Main.repository config) requestData)
       (mkClientEnv manager
          (BaseUrl Https "bitbucket.corp.appdynamics.com" 443 ""))
   case res of
@@ -59,21 +62,26 @@ data ProgramArgs = ProgramArgs {
     configPath :: FilePath
   }
 
-createPrFromConfig :: Config -> BasicAuthData -> ClientM ()
-createPrFromConfig conf authData = BB.createPr authData (Main.project conf) (Main.repository conf) (mkRequestData conf)
+createPrFromConfig :: Config -> BasicAuthData -> Text -> Text -> ClientM ()
+createPrFromConfig conf authData title localBranchName = BB.createPr authData (Main.project conf) (Main.repository conf) (mkRequestData conf title localBranchName)
 
 getPropOrDie :: Text -> Text -> IO Text
 getPropOrDie prop message = need prop >>= \case
-    Nothing -> die (prop <> " was not set. " <> message)
-    Just a -> return a
+  Nothing -> die (prop <> " was not set. " <> message)
+  Just a -> return a
 
-getCurrentBranchName :: IO Text
-getCurrentBranchName = fold (inshell "git branch | grep '*'" empty) head >>= \case
+getLocalBranchName :: IO Text
+getLocalBranchName = fold (inshell "git branch | grep '*'" empty) head >>= \case
   Nothing -> die "No current branch. Are you in the right directory?"
   Just a  -> return $ drop 2 $ lineToText a -- drop 2 to trim off "* "
 
+getLastCommitTitle :: IO Text
+getLastCommitTitle = fold (inshell "git log --oneline --format=%B -n 1 HEAD | head -n 1" empty) head >>= \case
+  Nothing -> die "Somehow there was no last git commit message?"
+  Just a  -> return $ lineToText a
+
 mkPushCommand :: Text -> Text
-mkPushCommand = (<>) "git push -u origin"
+mkPushCommand = (<>) "git push -u origin "
 
 readConfig :: FilePath -> IO Config
 readConfig fp = do
@@ -82,13 +90,15 @@ readConfig fp = do
     Left _    -> die $ fromString "Could not read config file. Is your config file formatted as correct JSON?"
     Right val -> return val
 
-mkRequestData :: Config -> BB.CreatePullRequest
-mkRequestData Config{..} = BB.defaultCreatePr
-  & BB.fromRef . BB.repository . BB.project . BB.key  .~ project
+mkRequestData :: Config -> Text -> Text -> BB.CreatePullRequest
+mkRequestData Config{..} title localBranchName = BB.defaultCreatePr
+  & BB.fromRef . BB.id .~ localBranchName
   & BB.fromRef . BB.repository . BB.slug .~ repository
-  & BB.toRef . BB.repository . BB.project . BB.key  .~ project
+  & BB.fromRef . BB.repository . BB.project . BB.key  .~ project
   & BB.toRef . BB.repository . BB.slug .~ repository
+  & BB.toRef . BB.repository . BB.project . BB.key  .~ project
   & BB.reviewers .~ makeReviewers reviewers
+  & BB.title .~ title
 
 makeReviewers :: [Text] -> [Reviewer]
 makeReviewers = map (\text -> BB.defaultReviewer & BB.user . BB.name .~ text)

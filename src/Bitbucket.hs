@@ -2,7 +2,8 @@
 module Bitbucket where
 
 import Control.Lens (makeLenses)
-import Data.Aeson (ToJSON)
+import Data.Aeson (ToJSON,fieldLabelModifier,defaultOptions)
+import Data.Aeson.TH (deriveJSON)
 import Data.Text (Text)
 import Data.Proxy (Proxy(..))
 import Servant.API ((:>), BasicAuth, Capture, JSON, Post, ReqBody)
@@ -32,8 +33,6 @@ data CreatePullRequest = CreatePullRequest
   , _reviewers :: [Reviewer]
   } deriving (Generic, Show)
 
-instance ToJSON CreatePullRequest
-
 defaultCreatePr :: CreatePullRequest
 defaultCreatePr = CreatePullRequest
   { _title = ""
@@ -48,12 +47,11 @@ defaultCreatePr = CreatePullRequest
   }
 
 --------------------------------------
+
 data BranchReference = BranchReference
   { _id :: Text
   , _repository :: Repository
   } deriving (Generic, Show)
-
-instance ToJSON BranchReference
 
 defaultBranchReference :: BranchReference
 defaultBranchReference = BranchReference
@@ -62,12 +60,11 @@ defaultBranchReference = BranchReference
   }
 
 --------------------------------------
+
 data Repository = Repository
   { _slug :: Text
   , _project :: Project
   } deriving (Generic, Show)
-
-instance ToJSON Repository
 
 defaultRepository :: Repository
 defaultRepository = Repository
@@ -76,21 +73,19 @@ defaultRepository = Repository
   }
 
 --------------------------------------
+
 newtype Project = Project
   { _key :: Text
   } deriving (Generic, Show)
-
-instance ToJSON Project
 
 defaultProject :: Project
 defaultProject = Project { _key = "" }
 
 --------------------------------------
+
 newtype Reviewer = Reviewer
   { _user :: User
   } deriving (Generic, Show)
-
-instance ToJSON Reviewer
 
 defaultReviewer :: Reviewer
 defaultReviewer = Reviewer { _user = defaultUser }
@@ -101,12 +96,10 @@ newtype User = User
   { _name :: Text
   } deriving (Generic, Show)
 
-instance ToJSON User
-
 defaultUser :: User
 defaultUser = User { _name = "" }
 
---------------------------------------
+-- Make all the lenses
 
 makeLenses ''CreatePullRequest
 makeLenses ''BranchReference
@@ -114,3 +107,12 @@ makeLenses ''Repository
 makeLenses ''Project
 makeLenses ''Reviewer
 makeLenses ''User
+
+-- Make all the JSON instances
+
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''CreatePullRequest
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''BranchReference
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''Repository
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''Project
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''Reviewer
+deriveJSON defaultOptions{fieldLabelModifier = drop 1} ''User

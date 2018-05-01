@@ -32,6 +32,7 @@ dependencies:
 - foldl
 - lens
 - system-filepath
+- aeson-pretty
 
 library:
   source-dirs: src
