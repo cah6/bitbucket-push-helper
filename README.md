@@ -4,7 +4,7 @@ This is a small script to create Bitbucket pull request with team specific defau
 
 ## Installation
 
-### Easy
+### Quick
 To make this easier to use, I've pre-compiled the script for Mac. So, to get this working all you likely need to do is:
 - Clone this repo
 - Create a config in `conf/` that looks like `exampleConfig.json`, or modify that. Or maybe check your team's slack 
@@ -14,8 +14,8 @@ so that you can easily reference this. For example, if you cloned this to your h
 to your `~/.bash_profile` (or similar):
 `alias pushbb="~/bitbucket-push-helper/app/PushHelper -c ~/bitbucket-push-helper/conf/myTeam.json"`
 
-### Hard 
-More time consuming than difficult, but this route involves building the script from source. To do this:
+### From source 
+To build from source:
 - install stack: `curl -sSL https://get.haskellstack.org/ | sh`
 - go to project root, run `stack build` and then, once that's done, `stack ghc -- -O2 -threaded app/PushHelper.hs`.
 
