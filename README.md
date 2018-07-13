@@ -13,6 +13,12 @@ channel for a pre-made one!
 so that you can easily reference this. For example, if you cloned this to your home directory, you could add the following
 to your `~/.bash_profile` (or similar):
 `alias pushbb="~/bitbucket-push-helper/app/PushHelper -c ~/bitbucket-push-helper/conf/myTeam.json"`
+While you're there, set your `OKTA_USERNAME` and `OKTA_PASSWORD`:
+```
+export OKTA_USERNAME="firstname.lastname@appdynamics.com"
+export OKTA_PASSWORD="my_password"
+```
+
 
 ### From source 
 To build from source:
